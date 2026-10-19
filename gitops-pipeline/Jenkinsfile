@@ -72,7 +72,7 @@ spec:
         container('git') {
           withCredentials([usernamePassword(credentialsId: 'github-token', usernameVariable: 'USERNAME', passwordVariable: 'PASSWORD')]) {
             sh '''
-              git clone https://$USERNAME:$PASSWORD@github.com/saniola/devops.git
+              git clone https://$USERNAME:$PASSWORD@github.com/saniola/aws-gitops-platform.git
               cd devops
               git checkout main
               cd gitops-pipeline/charts/django-app
@@ -84,7 +84,7 @@ spec:
 
               git add values.yaml
               git commit -m "Update image tag to $IMAGE_TAG"
-              git remote set-url origin https://$USERNAME:$PASSWORD@github.com/saniola/devops.git
+              git remote set-url origin https://$USERNAME:$PASSWORD@github.com/saniola/aws-gitops-platform.git
               git push origin main
             '''
           }

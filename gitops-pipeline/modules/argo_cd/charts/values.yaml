@@ -3,7 +3,7 @@ applications:
     namespace: default
     project: default
     source:
-      repoURL: https://github.com/saniola/devops.git
+      repoURL: https://github.com/saniola/aws-gitops-platform.git
       path: charts/django-app
       targetRevision: main
       helm:
@@ -19,7 +19,7 @@ applications:
 
 repositories:
   - name: django-app
-    url: https://github.com/saniola/devops.git
+    url: https://github.com/saniola/aws-gitops-platform.git
     username: ${github_user}
     password: ${github_pat}
 
