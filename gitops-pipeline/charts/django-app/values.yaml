@@ -1,0 +1,18 @@
+image:
+  repository: REPLACE_WITH_ECR_REPOSITORY
+  tag: v1.0.2
+  pullPolicy: Always
+
+service:
+  type: LoadBalancer
+  port: 8000
+
+ingress:
+  enabled: false
+
+config:
+  POSTGRES_PORT: 5432
+  POSTGRES_HOST: db
+  POSTGRES_USER: django_user
+  POSTGRES_DB: django_db
+  POSTGRES_PASSWORD: REPLACE_WITH_DATABASE_PASSWORD

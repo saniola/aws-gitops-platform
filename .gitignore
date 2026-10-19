@@ -2,6 +2,9 @@
 *.tfstate
 *.tfstate.backup
 terraform.tfvars
+backend.hcl
+.terraform/
+.terraform.lock.hcl
 
 
 # Byte-compiled / optimized / DLL files
@@ -16,7 +19,7 @@ __pycache__/
 # Environment variables
 .env
 
-# SQLite (якщо раптом зʼявиться)
+# SQLite
 *.sqlite3
 
 # Logs

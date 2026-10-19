@@ -1,230 +1,144 @@
-# DevOps Lesson 8–9 – Full CI/CD Pipeline with Jenkins, Helm, Terraform & Argo CD
+# AWS GitOps Platform
 
-## Overview
-
-This project implements a complete CI/CD pipeline for a Django application using:
-- **Jenkins** for building and pushing Docker images
-- **Terraform** for provisioning AWS infrastructure
-- **Amazon ECR** for storing Docker images
-- **Helm** for Kubernetes deployment
-- **Argo CD** for GitOps-based synchronization into EKS
-
----
+An end-to-end reference platform for provisioning and operating a containerized Django application on AWS. The repository demonstrates infrastructure as code, Kubernetes orchestration, CI/CD automation, GitOps delivery, managed databases, autoscaling, and observability.
 
 ## Architecture
 
 ```text
-GitHub (main branch)
-      |
-   Jenkins (pipeline build via Jenkinsfile)
-      |
-   Docker image → Amazon ECR
-      |
-   values.yaml updated in Git repo (new tag)
-      |
-   Argo CD detects change and deploys to EKS
+Developer push
+    │
+    ▼
+Jenkins on EKS ── Kaniko build ──► Amazon ECR
+    │                                   │
+    └── updates Helm image tag          │
+                    │                   │
+                    ▼                   │
+                 Argo CD ◄──────────────┘
+                    │
+                    ▼
+        Django on Amazon EKS ──► Amazon RDS / Aurora
+                    │
+                    └── metrics ──► Prometheus / Grafana
 ```
 
----
+## Technology Stack
 
-## Project Structure
+- **Cloud:** AWS VPC, EKS, ECR, RDS/Aurora, S3, DynamoDB, IAM
+- **Infrastructure as Code:** Terraform
+- **Containers:** Docker, Kubernetes, Kaniko
+- **Delivery:** Jenkins, Helm, Argo CD
+- **Observability:** Prometheus, Grafana
+- **Application:** Django, PostgreSQL, Nginx
 
+## Repository Layout
+
+```text
+.
+├── docker/                  # Django, Nginx, and local Docker Compose setup
+├── terraform-foundation/   # Remote state, networking, and container registry
+├── kubernetes-platform/    # VPC, EKS, ECR, and the application Helm chart
+└── gitops-pipeline/         # Full CI/CD, GitOps, database, and monitoring stack
+    ├── Jenkinsfile
+    ├── charts/django-app/
+    └── modules/
+        ├── argo_cd/
+        ├── ecr/
+        ├── eks/
+        ├── jenkins/
+        ├── rds/
+        └── vpc/
 ```
-lesson-8-9/
-├── main.tf                  # Entry point for Terraform modules
-├── backend.tf               # Backend config (S3 + DynamoDB)
-├── outputs.tf               # Global outputs
-├── Jenkinsfile              # CI pipeline definition
-├── modules/
-│   ├── vpc/                 # AWS VPC configuration
-│   ├── rds/                 # RDS/Aurora database configuration
-│   ├── ecr/                 # Elastic Container Registry
-│   ├── eks/                 # Kubernetes Cluster (EKS)
-│   ├── jenkins/             # Jenkins Helm deployment + config
-│   └── argo_cd/             # Argo CD Helm deployment + Application management
-├── charts/
-│   └── django-app/          # Helm chart for Django application
-│       ├── templates/
-│       └── values.yaml
-```
 
----
+The directories represent progressively broader deployment scopes and can also be reviewed independently.
 
-## Setup Instructions
+## Key Capabilities
 
-### 1. Provision Infrastructure
+- Reusable Terraform modules for VPC, EKS, ECR, Jenkins, Argo CD, and RDS/Aurora
+- Remote Terraform state backed by S3 with DynamoDB locking
+- Kubernetes-based Jenkins agents and daemonless image builds with Kaniko
+- Declarative Helm deployment managed continuously by Argo CD
+- Horizontal Pod Autoscaling from 2 to 6 replicas at 70% CPU utilization
+- Switchable standard RDS and Aurora database implementations
+- Prometheus metrics collection and Grafana dashboards
+- Local multi-container development environment with Django, PostgreSQL, and Nginx
+
+## Delivery Workflow
+
+1. Jenkins checks out the default branch.
+2. Kaniko builds the application image and pushes it to Amazon ECR.
+3. The pipeline updates the image tag in the Django Helm values.
+4. Argo CD detects the Git change and synchronizes the release to EKS.
+5. Kubernetes performs the rollout and applies the configured autoscaling policy.
+
+## Getting Started
+
+### Prerequisites
+
+- AWS CLI authenticated to a non-production AWS account
+- Terraform 1.x
+- Docker and Docker Compose
+- `kubectl`
+- Helm 3
+
+### Local application
 
 ```bash
-cd lesson-8-9
-terraform init
-terraform plan
-terraform apply
+cd docker
+cp .env.example .env
+docker compose up --build
 ```
 
-### 2. Login to aws ECR
+### Provision the platform
+
+Copy the repository-specific examples into your own Terraform configuration before applying. Backend names, account IDs, credentials, database passwords, and GitHub settings must be provided through your own secure configuration.
 
 ```bash
-aws ecr get-login-password --region <your-region> | docker login --username AWS --password-stdin <your-account-id>.dkr.ecr.<your-region>.amazonaws.com
-```
-### 3. Build and Push Docker Image
-
-```bash
-# Build Docker image
-docker build -t lesson-8-9 .
-
-# Tag the image for ECR
-docker tag lesson-8-9:latest <your-account-id>.dkr.ecr.<your-region>.amazonaws.com/lesson-8-9-ecr:latest
-
-# Push the image to ECR
-docker push <your-account-id>.dkr.ecr.<your-region>.amazonaws.com/lesson-8-9-ecr:latest
+cd gitops-pipeline
+terraform init -backend-config=backend.hcl
+terraform fmt -check -recursive
+terraform validate
+terraform plan -var-file=terraform.tfvars
+terraform apply -var-file=terraform.tfvars
 ```
 
----
+> AWS infrastructure can incur charges. Review the plan and destroy temporary environments when they are no longer needed.
 
-### 4. Configure kubectl and Deploy with Helm
+### Verify the cluster
 
 ```bash
-# Update kubeconfig for your EKS cluster
-aws eks --region <your-region> update-kubeconfig --name <your-cluster-name>
-
-# Verify access to the cluster
+aws eks update-kubeconfig --region <aws-region> --name <cluster-name>
 kubectl get nodes
+kubectl get pods --all-namespaces
 ```
 
-#### Deploy Django App using Helm
+## Configuration and Security
 
-```bash
-# Navigate to the Helm chart directory
-cd charts/django-app
+- Keep `terraform.tfvars`, backend configuration, credentials, and local environment files out of version control.
+- Supply GitHub credentials through Jenkins credentials and Terraform sensitive variables.
+- Supply Django and database secrets through environment-specific secret management.
+- Replace all example endpoints and identifiers before provisioning infrastructure.
+- Restrict public access, IAM permissions, and security-group rules for production use.
 
-# Update values.yaml with your ECR image repository and tag
-
-# Install the Helm chart
-helm install django-app .
-```
-
-```bash
-# Get the external URL for the service
-kubectl get svc
-```
-Find the `EXTERNAL-IP` for the `django-app-django` service and open it in your browser to access the Django application.
+This repository is a portfolio reference implementation, not a turnkey production environment. Production adoption requires dedicated state isolation, secret management, TLS, backup and restore policies, alerting, and a reviewed network-security model.
 
 ## Screenshots
 
-### Django Application
+| Component | Preview |
+| --- | --- |
+| Django application | ![Django application](django.png) |
+| Jenkins pipeline | ![Jenkins pipeline](jenkins.png) |
+| Argo CD | ![Argo CD dashboard](argocd.png) |
+| RDS | ![Amazon RDS configuration](non-aurora-1.png) |
+| Aurora | ![Amazon Aurora configuration](aurora.png) |
+| Grafana | ![Grafana dashboard](grafana-2.png) |
 
-![Django Application Screenshot](django.png)
+## Validation
 
-### Jenkins Pipeline
-
-![Jenkins Pipeline Screenshot](jenkins.png)
-
-### Argo CD Dashboard
-
-![Argo CD Dashboard Screenshot](argocd.png)
-
-### RDS Configuration
-![RDS Configuration Screenshot](non-aurora-1.png)
-![RDS Configuration Screenshot](non-aurora-2.png)
-
-### Aurora RDS Configuration
-![Aurora RDS Configuration Screenshot](aurora.png)
-
-## CI/CD Flow
-
-### Jenkins
-
-1. Clones repo and builds Docker image via `Dockerfile`
-2. Pushes image to ECR
-3. Updates `charts/django-app/values.yaml` with the new image tag
-4. Pushes changes to Git (main branch)
-
-### Argo CD
-
-1. Monitors the Git repository for updates
-2. Automatically syncs Helm chart into the EKS cluster
-3. Deploys new version of the app using updated image
-
----
-
-## Helm Deployment Details
-
-- `deployment.yaml` uses `envFrom` to pull variables from ConfigMap
-- `service.yaml` exposes app via LoadBalancer
-- `hpa.yaml` scales app from 2 to 6 pods at >70% CPU
-- `configmap.yaml` holds Django ENV variables
-
----
-
-## Notes
-
-- Jenkins uses Kaniko for building images inside Kubernetes
-- All provisioning is done via Terraform
-- Argo CD manages apps using declarative GitOps approach
-
-# Terraform RDS Module
-
-Universal module for creating an AWS RDS instance or Aurora cluster with minimal variable changes.
-
-## Supported Options
-
-- Standard RDS instance (PostgreSQL, MySQL, etc.)
-- Aurora Cluster (PostgreSQL-compatible, MySQL-compatible)
-
-The module automatically creates:
-
-- DB Subnet Group
-- Security Group
-- Parameter Group
-
-## Input Variables
-
-| Name                            | Type        | Required | Description                                                                 |
-| ------------------------------- | ----------- | -------- | --------------------------------------------------------------------------- |
-| `name`                          | string      | ✅       | Identifier (name) for the instance or cluster                               |
-| `use_aurora`                    | bool        | ✅       | If `true`, an Aurora Cluster will be created                                |
-| `engine`                        | string      | ✅       | Database engine: `postgres`, `mysql`, `aurora-postgresql`, `aurora-mysql`   |
-| `engine_version`                | string      | ✅       | Database version (e.g., `15.3`)                                              |
-| `instance_class`                | string      | ✅       | EC2 instance class (e.g., `db.t3.medium`)                                    |
-| `allocated_storage`             | number      | ❌       | Storage size (only for standard RDS)                                        |
-| `aurora_instance_count`         | number      | ❌       | Number of instances in the Aurora cluster                                   |
-| `db_name`                       | string      | ✅       | Name of the database (must start with a letter and not contain special chars) |
-| `username`                      | string      | ✅       | Username for database access                                                |
-| `password`                      | string      | ✅       | Password for the database user                                              |
-| `multi_az`                      | bool        | ❌       | If `true`, enables Multi-AZ for RDS                                          |
-| `publicly_accessible`           | bool        | ❌       | If `true`, the instance will be publicly accessible                         |
-| `backup_retention_period`       | number      | ❌       | Number of days to retain backups                                            |
-| `parameter_group_family_rds`    | string      | ✅ (RDS) | Example: `postgres15`                                                       |
-| `parameter_group_family_aurora` | string      | ✅ (Aurora) | Example: `aurora-postgresql15`                                           |
-| `parameters`                    | map(string) | ❌       | Additional DB parameters (key-value pairs)                                  |
-| `tags`                          | map(string) | ❌       | Resource tags                                                               |
-
-## How to Update Engine, Type, Class, etc.
-
-| What to Change                  | How                                                                 |
-| ------------------------------ | ------------------------------------------------------------------- |
-| 🔁 Standard RDS ↔ Aurora        | Toggle `use_aurora` between `true` and `false`                      |
-| 🔁 Engine (PostgreSQL, MySQL)   | Modify `engine` and `engine_version`                                |
-| 🔁 Instance Class               | Update `instance_class` (e.g., `db.t3.micro`)                        |
-| 🔁 Database Name                | Modify `db_name`                                                    |
-| 🛠️ DB Parameters                | Add entries to `parameters` map (key-value pairs)                   |
-
-
-## Grafana Dashboard
-```Instalation Steps:
-   kubectl create namespace monitoring
-   helm repo add prometheus-community https://prometheus-community.github.io/helm-charts
-   helm repo update
-   helm install prometheus prometheus-community/prometheus --namespace monitoring
-
-   helm repo add grafana https://grafana.github.io/helm-charts
-   helm repo update
-
-
-   helm install grafana grafana/grafana --namespace monitoring --set adminPassword=admin123
-   kubectl port-forward -n monitoring svc/grafana 3000:80
+```bash
+terraform fmt -check -recursive terraform-foundation kubernetes-platform gitops-pipeline
+docker compose -f docker/docker-compose.yml config
 ```
 
-![Grafana Screenshot](grafana-1.png)
-![Grafana Dashboard Screenshot 1](grafana-2.png)
-![Grafana Dashboard Screenshot 2](grafana-3.png)
+## License
+
+No license has been assigned. The source is available for portfolio review; reuse requires permission from the repository owner.
